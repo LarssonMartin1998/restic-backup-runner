@@ -1,20 +1,27 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   cfg = config.services.restic-backup-runner;
 
-  configFile = pkgs.writeText "restic-backup-runner-config.json" (builtins.toJSON {
-    resticPasswordFile = cfg.settings.resticPasswordFile;
-    backupRepo = cfg.settings.backupRepo;
-    dbStagingDump = cfg.settings.dbStagingDump;
-    dailyBackupsToKeep = cfg.settings.dailyBackupsToKeep;
-    sqliteDatabases = cfg.settings.sqliteDatabases;
-    postgresDatabases = map sanitizePostgres cfg.settings.postgresDatabases;
-    files = cfg.settings.files;
-    emailRecipient = cfg.settings.emailRecipient;
-    msmtpAccount = cfg.settings.msmtpAccount;
-    pingEndpoint = cfg.settings.pingEndpoint;
-    pingServiceName = cfg.settings.pingServiceName;
-  });
+  configFile = pkgs.writeText "restic-backup-runner-config.json" (
+    builtins.toJSON {
+      resticPasswordFile = cfg.settings.resticPasswordFile;
+      backupRepo = cfg.settings.backupRepo;
+      dbStagingDump = cfg.settings.dbStagingDump;
+      dailyBackupsToKeep = cfg.settings.dailyBackupsToKeep;
+      sqliteDatabases = cfg.settings.sqliteDatabases;
+      postgresDatabases = map sanitizePostgres cfg.settings.postgresDatabases;
+      files = cfg.settings.files;
+      emailRecipient = cfg.settings.emailRecipient;
+      msmtpAccount = cfg.settings.msmtpAccount;
+      pingEndpoint = cfg.settings.pingEndpoint;
+      pingServiceName = cfg.settings.pingServiceName;
+    }
+  );
 
   serviceEnv = lib.mkMerge [
     { RESTIC_BACKUP_CONFIG = configFile; }
@@ -23,47 +30,54 @@ let
     })
   ];
 
-  sqliteDbSubmodule = lib.types.submodule ({ ... }: {
-    options = {
-      name = lib.mkOption {
-        type = lib.types.str;
-        description = "Logical name for the SQLite backup file.";
+  sqliteDbSubmodule = lib.types.submodule (
+    { ... }:
+    {
+      options = {
+        name = lib.mkOption {
+          type = lib.types.str;
+          description = "Logical name for the SQLite backup file.";
+        };
+        path = lib.mkOption {
+          type = lib.types.str;
+          description = "Path to the SQLite database file.";
+        };
       };
-      path = lib.mkOption {
-        type = lib.types.str;
-        description = "Path to the SQLite database file.";
-      };
-    };
-  });
+    }
+  );
 
-  postgresDbSubmodule = lib.types.submodule ({ ... }: {
-    options = {
-      name = lib.mkOption {
-        type = lib.types.str;
-        description = "Logical name for the Postgres dump file.";
+  postgresDbSubmodule = lib.types.submodule (
+    { ... }:
+    {
+      options = {
+        name = lib.mkOption {
+          type = lib.types.str;
+          description = "Logical name for the Postgres dump file.";
+        };
+        database = lib.mkOption {
+          type = lib.types.str;
+          description = "Postgres database name.";
+        };
+        username = lib.mkOption {
+          type = lib.types.str;
+          description = "Postgres username for pg_dump.";
+        };
+        host = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Postgres host (defaults to localhost).";
+        };
+        port = lib.mkOption {
+          type = lib.types.nullOr lib.types.port;
+          default = null;
+          description = "Postgres port (defaults to 5432).";
+        };
       };
-      database = lib.mkOption {
-        type = lib.types.str;
-        description = "Postgres database name.";
-      };
-      username = lib.mkOption {
-        type = lib.types.str;
-        description = "Postgres username for pg_dump.";
-      };
-      host = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Postgres host (defaults to localhost).";
-      };
-      port = lib.mkOption {
-        type = lib.types.nullOr lib.types.port;
-        default = null;
-        description = "Postgres port (defaults to 5432).";
-      };
-    };
-  });
+    }
+  );
 
-  sanitizePostgres = db:
+  sanitizePostgres =
+    db:
     db
     // (lib.optionalAttrs (db.host == null) { host = "localhost"; })
     // (lib.optionalAttrs (db.port == null) { port = 5432; });
@@ -96,27 +110,27 @@ in
         description = "Staging directory for database dumps.";
       };
 
-      dailyBackupsToKeep = lib.mkOption {
+      numBackupsToKeep = lib.mkOption {
         type = lib.types.int;
         default = 3;
-        description = "Number of daily restic snapshots to keep.";
+        description = "Number of restic snapshots to keep.";
       };
 
       sqliteDatabases = lib.mkOption {
         type = lib.types.listOf sqliteDbSubmodule;
-        default = [];
+        default = [ ];
         description = "SQLite databases to dump before backup.";
       };
 
       postgresDatabases = lib.mkOption {
         type = lib.types.listOf postgresDbSubmodule;
-        default = [];
+        default = [ ];
         description = "Postgres databases to dump before backup.";
       };
 
       files = lib.mkOption {
         type = lib.types.listOf lib.types.str;
-        default = [];
+        default = [ ];
         description = "Additional files or directories to back up with restic.";
       };
 

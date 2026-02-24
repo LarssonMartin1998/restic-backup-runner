@@ -31,7 +31,7 @@ config_jq_optional() {
 RESTIC_PASSWORD_FILE="$(config_jq_required '.resticPasswordFile')"
 BACKUP_REPO="$(config_jq_required '.backupRepo')"
 DB_STAGING_DUMP="$(config_jq_required '.dbStagingDump')"
-DAILY_BACKUPS_TO_KEEP="$(config_jq_required '.dailyBackupsToKeep // 3')"
+NUM_BACKUPS_TO_KEEP="$(config_jq_required '.numBackupsToKeep // 3')"
 EMAIL_RECIPIENT="$(config_jq_optional '.emailRecipient')"
 MSMTP_ACCOUNT="$(config_jq_optional '.msmtpAccount')"
 if [[ -z "$MSMTP_ACCOUNT" ]]; then
