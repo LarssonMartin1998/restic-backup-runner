@@ -12,7 +12,7 @@ let
       resticPasswordFile = cfg.settings.resticPasswordFile;
       backupRepo = cfg.settings.backupRepo;
       dbStagingDump = cfg.settings.dbStagingDump;
-      dailyBackupsToKeep = cfg.settings.dailyBackupsToKeep;
+      numBackupsToKeep = cfg.settings.numBackupsToKeep;
       sqliteDatabases = cfg.settings.sqliteDatabases;
       postgresDatabases = map sanitizePostgres cfg.settings.postgresDatabases;
       files = cfg.settings.files;
@@ -23,11 +23,12 @@ let
     }
   );
 
-  serviceEnv =
-    { RESTIC_BACKUP_CONFIG = configFile; }
-    // (lib.optionalAttrs (cfg.settings.postgresPasswordsFile != null) {
-      POSTGRES_PASSWORDS_FILE = cfg.settings.postgresPasswordsFile;
-    });
+  serviceEnv = {
+    RESTIC_BACKUP_CONFIG = configFile;
+  }
+  // (lib.optionalAttrs (cfg.settings.postgresPasswordsFile != null) {
+    POSTGRES_PASSWORDS_FILE = cfg.settings.postgresPasswordsFile;
+  });
 
   sqliteDbSubmodule = lib.types.submodule (
     { ... }:
