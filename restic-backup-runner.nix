@@ -23,12 +23,11 @@ let
     }
   );
 
-  serviceEnv = lib.mkMerge [
+  serviceEnv =
     { RESTIC_BACKUP_CONFIG = configFile; }
-    (lib.mkIf (cfg.settings.postgresPasswordsFile != null) {
+    // (lib.optionalAttrs (cfg.settings.postgresPasswordsFile != null) {
       POSTGRES_PASSWORDS_FILE = cfg.settings.postgresPasswordsFile;
-    })
-  ];
+    });
 
   sqliteDbSubmodule = lib.types.submodule (
     { ... }:
