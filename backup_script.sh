@@ -1,53 +1,65 @@
 #!/usr/bin/env bash
 
-RESTIC_PASSWORD_FILE="/secrets/restic/password.txt"
-DEPENDENCIES=(
-    "restic"
-    "sqlite3"
-    "pg_dump"
-    "jq"
-    "sendmail"
-    "msmtp"
-)
-DAILY_BACKUPS_TO_KEEP=3
-BACKUP_REPO="/var/backup/restic"
-DB_STAGING_DUMP="/var/backup/db_dump"
+CONFIG_PATH="${RESTIC_BACKUP_CONFIG:-/etc/restic-backup-runner/config.json}"
+if [[ ! -r "$CONFIG_PATH" ]]; then
+    echo "Error: config file not found or not readable at $CONFIG_PATH" >&2
+    exit 1
+fi
 
-SQLITE_TO_BACKUP=(
-    '{"path": "/var/lib/gotosocial/database.sqlite", "name":"gotosocial" }'
-)
-POSTGRES_TO_BACKUP=(
-)
-FILES_TO_BACKUP=(
-)
-
-check_command_exist() {
-    local cmd=$1
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-        echo "Error: $cmd could not be found" >&2
-        return 1
+config_jq_required() {
+    local filter=$1
+    local value
+    if ! value=$(jq -e -r "$filter" "$CONFIG_PATH"); then
+        echo "Error: failed to read required config value with filter '$filter' from $CONFIG_PATH" >&2
+        exit 1
     fi
-    return 0
+    echo "$value"
 }
 
-check_dependencies() {
-    local -n commands_to_check=$1
-    local missing=0
-
-    for cmd in "${commands_to_check[@]}"; do
-        if ! check_command_exist "$cmd"; then
-            missing=1
-        fi
-    done
-
-    return "$missing"
+config_jq_optional() {
+    local filter=$1
+    local value
+    if ! value=$(jq -r "$filter" "$CONFIG_PATH" 2>/dev/null); then
+        value=""
+    fi
+    if [[ "$value" == "null" ]]; then
+        value=""
+    fi
+    echo "$value"
 }
+
+RESTIC_PASSWORD_FILE="$(config_jq_required '.resticPasswordFile')"
+BACKUP_REPO="$(config_jq_required '.backupRepo')"
+DB_STAGING_DUMP="$(config_jq_required '.dbStagingDump')"
+DAILY_BACKUPS_TO_KEEP="$(config_jq_required '.dailyBackupsToKeep // 3')"
+EMAIL_RECIPIENT="$(config_jq_optional '.emailRecipient')"
+MSMTP_ACCOUNT="$(config_jq_optional '.msmtpAccount')"
+if [[ -z "$MSMTP_ACCOUNT" ]]; then
+    MSMTP_ACCOUNT="default"
+fi
+PING_ENDPOINT="$(config_jq_optional '.pingEndpoint')"
+PING_SERVICE_NAME="$(config_jq_optional '.pingServiceName')"
+
+mapfile -t SQLITE_TO_BACKUP < <(jq -c '.sqliteDatabases[]?' "$CONFIG_PATH")
+mapfile -t POSTGRES_TO_BACKUP < <(jq -c '.postgresDatabases[]?' "$CONFIG_PATH")
+mapfile -t FILES_TO_BACKUP < <(jq -r '.files[]?' "$CONFIG_PATH")
+
+declare -A POSTGRES_PASSWORDS
+if [[ -n "${POSTGRES_PASSWORDS_FILE:-}" ]]; then
+    if [[ ! -r "$POSTGRES_PASSWORDS_FILE" ]]; then
+        echo "Warning: POSTGRES_PASSWORDS_FILE is set but not readable at $POSTGRES_PASSWORDS_FILE" >&2
+    else
+        while IFS=$'\t' read -r name password; do
+            POSTGRES_PASSWORDS["$name"]="$password"
+        done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' "$POSTGRES_PASSWORDS_FILE")
+    fi
+fi
 
 EMAIL_SETUP_OK=0
 send_error_and_exit() {
     local error=$1
-    if [[ "$EMAIL_SETUP_OK" == 1 ]]; then
-        echo -e "Subject: Error from just-a-shell backup system\n\n$error" | sendmail alert@just-a-shell.dev
+    if [[ "$EMAIL_SETUP_OK" == 1 && -n "$EMAIL_RECIPIENT" ]]; then
+        echo -e "Subject: Error from just-a-shell backup system\n\n$error" | sendmail "$EMAIL_RECIPIENT"
     fi
 
     echo "$error" >&2
@@ -55,15 +67,12 @@ send_error_and_exit() {
 }
 
 validate_email_notification_config() {
-    # This is also checked during dependency checks, however, we want to be able to send emails if depenency checks fails.
-    # which means this has to run first, and we have at this point not guaranteed the existance of msmtp...
-    # Chicken and egg situation :) Double checking is fine
-    if ! check_command_exist msmtp; then
-        echo "Warning: msmtp missing. Notifications won't be sent!"
-        return 1;
+    if [[ -z "$EMAIL_RECIPIENT" ]]; then
+        return 1
     fi
 
-    if ! msmtp --serverinfo --account=default >/dev/null 2>&1; then
+    # We want to be able to send emails even if later steps fail, so verify msmtp early.
+    if ! msmtp --serverinfo --account="$MSMTP_ACCOUNT" >/dev/null 2>&1; then
         echo "Warning: misconfigured msmtp config. Notifications won't be sent!"
         return 1;
     fi
@@ -193,12 +202,19 @@ dump_postgres_backups() {
 
 finalize_staging_environment() {
     local tmp_dump=$1
-    local bkp_path="${DB_STAGING_DUMP}_bkp/"
+    local bkp_path="${DB_STAGING_DUMP}_bkp"
 
     local cmd_output
-    if ! cmd_output=$(mv "$DB_STAGING_DUMP/" "$bkp_path" 2>&1); then
-        echo "Error: failed to move previous dump to the backup location: $cmd_output" >&2
+    if ! cmd_output=$(rm -rf "$bkp_path" 2>&1); then
+        echo "Error: failed to clear previous backup path ($bkp_path): $cmd_output" >&2
         return 1
+    fi
+
+    if [[ -d "$DB_STAGING_DUMP" ]]; then
+        if ! cmd_output=$(mv "$DB_STAGING_DUMP" "$bkp_path" 2>&1); then
+            echo "Error: failed to move previous dump to the backup location: $cmd_output" >&2
+            return 1
+        fi
     fi
 
     if ! cmd_output=$(mv "$tmp_dump/" "$DB_STAGING_DUMP/" 2>&1); then
@@ -206,7 +222,7 @@ finalize_staging_environment() {
         return 1
     fi
 
-    if ! cmd_output=$(rm -rf "$bkp_path"); then
+    if ! cmd_output=$(rm -rf "$bkp_path" 2>&1); then
         echo "Error: failed to delete the backup path ($bkp_path) after everything else successfully finished: $cmd_output" >&2
         return 1
     fi
@@ -236,6 +252,21 @@ backup_data_with_restic() {
 }
 
 perform_graceful_exit_and_ping() {
+    if [[ -z "$PING_ENDPOINT" ]]; then
+        return 0
+    fi
+
+    local cmd_output
+    if [[ -z "$PING_SERVICE_NAME" ]]; then
+        echo "Error: pingServiceName is required when pingEndpoint is set" >&2
+        return 1
+    fi
+
+    if ! cmd_output=$(jq -n --arg service_name "$PING_SERVICE_NAME" '{service_name: $service_name}' | xh POST "$PING_ENDPOINT" Content-Type:application/json 2>&1); then
+        echo "Error: failed to ping endpoint with JSON payload: $cmd_output" >&2
+        return 1
+    fi
+
     return 0
 }
 
@@ -262,11 +293,6 @@ validate_email_notification_config
 if ! validate_restic_repository; then
     send_error_and_exit "restic repository is invalid, aborting!" 
 fi
-
-if ! check_dependencies DEPENDENCIES; then
-    send_error_and_exit "missing dependencies, aborting!" 
-fi
-echo "Dependency check successfully completed."
 
 STAGING_TMP="${DB_STAGING_DUMP}_tmp"
 if ! (rm -rf "$STAGING_TMP" && mkdir -p "$STAGING_TMP") >/dev/null 2>&1; then
