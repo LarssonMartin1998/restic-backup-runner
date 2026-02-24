@@ -32,11 +32,6 @@ RESTIC_PASSWORD_FILE="$(config_jq_required '.resticPasswordFile')"
 BACKUP_REPO="$(config_jq_required '.backupRepo')"
 DB_STAGING_DUMP="$(config_jq_required '.dbStagingDump')"
 NUM_BACKUPS_TO_KEEP="$(config_jq_required '.numBackupsToKeep // 3')"
-EMAIL_RECIPIENT="$(config_jq_optional '.emailRecipient')"
-MSMTP_ACCOUNT="$(config_jq_optional '.msmtpAccount')"
-if [[ -z "$MSMTP_ACCOUNT" ]]; then
-    MSMTP_ACCOUNT="default"
-fi
 PING_ENDPOINT="$(config_jq_optional '.pingEndpoint')"
 PING_SERVICE_NAME="$(config_jq_optional '.pingServiceName')"
 
@@ -55,29 +50,9 @@ if [[ -n "${POSTGRES_PASSWORDS_FILE:-}" ]]; then
     fi
 fi
 
-EMAIL_SETUP_OK=0
-send_error_and_exit() {
-    local error=$1
-    if [[ "$EMAIL_SETUP_OK" == 1 && -n "$EMAIL_RECIPIENT" ]]; then
-        echo -e "Subject: Error from just-a-shell backup system\n\n$error" | sendmail "$EMAIL_RECIPIENT"
-    fi
-
-    echo "$error" >&2
+fail() {
+    echo "$1" >&2
     exit 1
-}
-
-validate_email_notification_config() {
-    if [[ -z "$EMAIL_RECIPIENT" ]]; then
-        return 1
-    fi
-
-    # We want to be able to send emails even if later steps fail, so verify msmtp early.
-    if ! msmtp --serverinfo --account="$MSMTP_ACCOUNT" >/dev/null 2>&1; then
-        echo "Warning: misconfigured msmtp config. Notifications won't be sent!"
-        return 1;
-    fi
-    EMAIL_SETUP_OK=1
-    return 0
 }
 
 validate_restic_repository() {
@@ -288,39 +263,37 @@ cleanup() {
 
 trap cleanup EXIT
 
-validate_email_notification_config
-
 if ! validate_restic_repository; then
-    send_error_and_exit "restic repository is invalid, aborting!" 
+    fail "restic repository is invalid, aborting!" 
 fi
 
 STAGING_TMP="${DB_STAGING_DUMP}_tmp"
 if ! (rm -rf "$STAGING_TMP" && mkdir -p "$STAGING_TMP") >/dev/null 2>&1; then
-    send_error_and_exit "permission denied for creating staging directory at: '${DB_STAGING_DUMP}', aborting!" 
+    fail "permission denied for creating staging directory at: '${DB_STAGING_DUMP}', aborting!" 
 fi
 echo "Created temporary db staging directory '$STAGING_TMP'."
 
 if ! dump_sqlite_backups SQLITE_TO_BACKUP "$STAGING_TMP/sqlite"; then
-    send_error_and_exit "failed to create backups for SQLite databases, aborting!" 
+    fail "failed to create backups for SQLite databases, aborting!" 
 fi
 echo "Dumped all SQLite databases in the temporary staging directory '$STAGING_TMP'."
 
 if ! dump_postgres_backups POSTGRES_TO_BACKUP "$STAGING_TMP/postgres"; then
-    send_error_and_exit "failed to create backups for Postgres databases, aborting!"
+    fail "failed to create backups for Postgres databases, aborting!"
 fi
 echo "Dumped all Postgres databases in the temporary staging directory '$STAGING_TMP'."
 
 if ! finalize_staging_environment "$STAGING_TMP"; then
-    send_error_and_exit "failed to finalize the staging environment, aborting!"
+    fail "failed to finalize the staging environment, aborting!"
 fi
 echo "Finalized the staging environment, the temporary dump has now replaced the previous backup dump at: $DB_STAGING_DUMP"
 
 if ! backup_data_with_restic; then
-    send_error_and_exit "failed to backup the data with restic, aborting!"
+    fail "failed to backup the data with restic, aborting!"
 fi
 echo "Finished backing up all data in restic vault at path: $BACKUP_REPO"
 
 if ! perform_graceful_exit_and_ping; then
-    send_error_and_exit "failed to graceully exit, backup is added but we didn't ping for an OK heartbeat"
+    fail "failed to graceully exit, backup is added but we didn't ping for an OK heartbeat"
 fi
 echo "Script finished successfully, your data is secure. Happy life :)"

@@ -21,7 +21,6 @@
           bash
           coreutils
           jq
-          msmtp
           postgresql
           sqlite
           xh

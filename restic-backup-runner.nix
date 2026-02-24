@@ -16,8 +16,6 @@ let
       sqliteDatabases = cfg.settings.sqliteDatabases;
       postgresDatabases = map sanitizePostgres cfg.settings.postgresDatabases;
       files = cfg.settings.files;
-      emailRecipient = cfg.settings.emailRecipient;
-      msmtpAccount = cfg.settings.msmtpAccount;
       pingEndpoint = cfg.settings.pingEndpoint;
       pingServiceName = cfg.settings.pingServiceName;
     }
@@ -138,18 +136,6 @@ in
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = "Path to a JSON file mapping database name to password for pg_dump.";
-      };
-
-      emailRecipient = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Email recipient for error notifications (optional).";
-      };
-
-      msmtpAccount = lib.mkOption {
-        type = lib.types.str;
-        default = "default";
-        description = "msmtp account to use for notifications.";
       };
 
       pingEndpoint = lib.mkOption {
