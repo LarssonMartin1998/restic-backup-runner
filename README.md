@@ -30,5 +30,6 @@ Import the module and set the basics:
 Notes:
 - The restic repo and password file must already exist on the server.
 - If you use Postgres, set `postgresPasswordsFile` to a JSON map of db name -> password.
+- If you use `pingEndpoint`, set `pingAuthTokenFile` to a readable file containing the bearer token.
 
 That’s it. Keep it boring and it should just run.

@@ -34,7 +34,7 @@ DB_STAGING_DUMP="$(config_jq_required '.dbStagingDump')"
 NUM_BACKUPS_TO_KEEP="$(config_jq_required '.numBackupsToKeep // 3')"
 PING_ENDPOINT="$(config_jq_optional '.pingEndpoint')"
 PING_SERVICE_NAME="$(config_jq_optional '.pingServiceName')"
-PING_AUTH_TOKEN="$(config_jq_optional '.pingAuthToken')"
+PING_AUTH_TOKEN_FILE="$(config_jq_optional '.pingAuthTokenFile')"
 
 # shellcheck disable=SC2034
 mapfile -t SQLITE_TO_BACKUP < <(jq -c '.sqliteDatabases[]?' "$CONFIG_PATH")
@@ -240,7 +240,22 @@ perform_graceful_exit_and_ping() {
         return 1
     fi
 
-    if ! cmd_output=$(jq -n --arg service_name "$PING_SERVICE_NAME" '{service_name: $service_name}' | xh POST "$PING_ENDPOINT" Authorization:"Bearer $PING_AUTH_TOKEN" 2>&1); then
+    if [[ -z "$PING_AUTH_TOKEN_FILE" ]]; then
+        echo "Error: pingAuthTokenFile is required when pingEndpoint is set" >&2
+        return 1
+    fi
+    if [[ ! -r "$PING_AUTH_TOKEN_FILE" ]]; then
+        echo "Error: pingAuthTokenFile is not readable at $PING_AUTH_TOKEN_FILE" >&2
+        return 1
+    fi
+
+    local ping_auth_token
+    if ! ping_auth_token=$(<"$PING_AUTH_TOKEN_FILE"); then
+        echo "Error: failed to read pingAuthTokenFile at $PING_AUTH_TOKEN_FILE" >&2
+        return 1
+    fi
+
+    if ! cmd_output=$(jq -n --arg service_name "$PING_SERVICE_NAME" '{service_name: $service_name}' | xh POST "$PING_ENDPOINT" Authorization:"Bearer $ping_auth_token" 2>&1); then
         echo "Error: failed to ping endpoint with JSON payload: $cmd_output" >&2
         return 1
     fi
