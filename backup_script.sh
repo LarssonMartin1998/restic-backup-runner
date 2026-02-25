@@ -218,7 +218,7 @@ backup_data_with_restic() {
         fi
     fi
 
-    if ! restic -r "$BACKUP_REPO" --password-file "$RESTIC_PASSWORD_FILE" forget --keep-daily "$DAILY_BACKUPS_TO_KEEP" --prune >/dev/null 2>&1; then
+    if ! restic -r "$BACKUP_REPO" --password-file "$RESTIC_PASSWORD_FILE" forget --keep-daily "$NUM_BACKUPS_TO_KEEP" --prune >/dev/null 2>&1; then
         echo "Error: failed to clean up old snapshots" >&2
         return 1
     fi
