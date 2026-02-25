@@ -34,7 +34,7 @@ DB_STAGING_DUMP="$(config_jq_required '.dbStagingDump')"
 NUM_BACKUPS_TO_KEEP="$(config_jq_required '.numBackupsToKeep // 3')"
 PING_ENDPOINT="$(config_jq_optional '.pingEndpoint')"
 PING_SERVICE_NAME="$(config_jq_optional '.pingServiceName')"
-PING_AUTH_TOKEN="$(config_jq_optional '.pingAuthBearer')"
+PING_AUTH_TOKEN="$(config_jq_optional '.pingAuthToken')"
 
 # shellcheck disable=SC2034
 mapfile -t SQLITE_TO_BACKUP < <(jq -c '.sqliteDatabases[]?' "$CONFIG_PATH")
