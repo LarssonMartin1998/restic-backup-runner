@@ -35,7 +35,9 @@ NUM_BACKUPS_TO_KEEP="$(config_jq_required '.numBackupsToKeep // 3')"
 PING_ENDPOINT="$(config_jq_optional '.pingEndpoint')"
 PING_SERVICE_NAME="$(config_jq_optional '.pingServiceName')"
 
+# shellcheck disable=SC2034
 mapfile -t SQLITE_TO_BACKUP < <(jq -c '.sqliteDatabases[]?' "$CONFIG_PATH")
+# shellcheck disable=SC2034
 mapfile -t POSTGRES_TO_BACKUP < <(jq -c '.postgresDatabases[]?' "$CONFIG_PATH")
 mapfile -t FILES_TO_BACKUP < <(jq -r '.files[]?' "$CONFIG_PATH")
 
