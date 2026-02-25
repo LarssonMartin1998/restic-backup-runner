@@ -18,6 +18,7 @@ let
       files = cfg.settings.files;
       pingEndpoint = cfg.settings.pingEndpoint;
       pingServiceName = cfg.settings.pingServiceName;
+      pingAuthToken = cfg.settings.pingAuthToken;
     }
   );
 
@@ -149,6 +150,12 @@ in
         default = null;
         description = "Service name to send to the ping endpoint.";
       };
+
+      pingAuthToken = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Bearer auth token to authenticate when pinging endpoint.";
+      };
     };
 
     timer = {
@@ -171,6 +178,10 @@ in
       {
         assertion = cfg.settings.pingEndpoint == null || cfg.settings.pingServiceName != null;
         message = "services.restic-backup-runner.settings.pingServiceName must be set when pingEndpoint is set.";
+      }
+      {
+        assertion = cfg.settings.pingEndpoint == null || cfg.settings.pingAuthToken != null;
+        message = "services.restic-backup-runner.settings.pingAuthToken must be set when pingEndpoint is set.";
       }
     ];
 

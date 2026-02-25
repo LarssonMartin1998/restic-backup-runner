@@ -34,6 +34,7 @@ DB_STAGING_DUMP="$(config_jq_required '.dbStagingDump')"
 NUM_BACKUPS_TO_KEEP="$(config_jq_required '.numBackupsToKeep // 3')"
 PING_ENDPOINT="$(config_jq_optional '.pingEndpoint')"
 PING_SERVICE_NAME="$(config_jq_optional '.pingServiceName')"
+PING_AUTH_TOKEN="$(config_jq_optional '.pingAuthBearer')"
 
 # shellcheck disable=SC2034
 mapfile -t SQLITE_TO_BACKUP < <(jq -c '.sqliteDatabases[]?' "$CONFIG_PATH")
@@ -239,7 +240,7 @@ perform_graceful_exit_and_ping() {
         return 1
     fi
 
-    if ! cmd_output=$(jq -n --arg service_name "$PING_SERVICE_NAME" '{service_name: $service_name}' | xh POST "$PING_ENDPOINT" Content-Type:application/json 2>&1); then
+    if ! cmd_output=$(jq -n --arg service_name "$PING_SERVICE_NAME" '{service_name: $service_name}' | xh POST "$PING_ENDPOINT" Authorization:"Bearer $PING_AUTH_TOKEN" 2>&1); then
         echo "Error: failed to ping endpoint with JSON payload: $cmd_output" >&2
         return 1
     fi
