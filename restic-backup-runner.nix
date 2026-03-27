@@ -7,6 +7,8 @@
 let
   cfg = config.services.restic-backup-runner;
 
+  configPath = "/etc/restic-backup-runner/config.json";
+
   configFile = pkgs.writeText "restic-backup-runner-config.json" (
     builtins.toJSON {
       resticPasswordFile = cfg.settings.resticPasswordFile;
@@ -15,7 +17,7 @@ let
       numBackupsToKeep = cfg.settings.numBackupsToKeep;
       sqliteDatabases = cfg.settings.sqliteDatabases;
       postgresDatabases = map sanitizePostgres cfg.settings.postgresDatabases;
-      files = cfg.settings.files;
+      files = cfg.settings.files ++ [ configPath ];
       pingEndpoint = cfg.settings.pingEndpoint;
       pingServiceName = cfg.settings.pingServiceName;
       pingAuthTokenFile = cfg.settings.pingAuthTokenFile;
@@ -23,7 +25,7 @@ let
   );
 
   serviceEnv = {
-    RESTIC_BACKUP_CONFIG = configFile;
+    RESTIC_BACKUP_CONFIG = configPath;
   }
   // (lib.optionalAttrs (cfg.settings.postgresPasswordsFile != null) {
     POSTGRES_PASSWORDS_FILE = cfg.settings.postgresPasswordsFile;
@@ -174,6 +176,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    environment.etc."restic-backup-runner/config.json" = {
+      source = configFile;
+      copy = true;
+    };
+
     assertions = [
       {
         assertion = cfg.settings.pingEndpoint == null || cfg.settings.pingServiceName != null;
