@@ -176,9 +176,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.etc."restic-backup-runner/config.json" = {
-      source = configFile;
-      copy = true;
+    system.activationScripts.restic-backup-runner-config = {
+      text = ''
+        mkdir -p /etc/restic-backup-runner
+        cp ${configFile} /etc/restic-backup-runner/config.json
+        chmod 644 /etc/restic-backup-runner/config.json
+      '';
     };
 
     assertions = [
