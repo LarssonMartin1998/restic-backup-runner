@@ -264,7 +264,7 @@ perform_graceful_exit_and_ping() {
 }
 
 cleanup() {
-    rm -rf "$STAGING_TMP" 2>/dev/null || true
+    rm -rf "${STAGING_TMP:-}" 2>/dev/null || true
 
     local bkp_path="${DB_STAGING_DUMP}_bkp"
     if [[ -d "$bkp_path" ]]; then
