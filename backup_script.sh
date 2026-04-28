@@ -64,6 +64,8 @@ validate_restic_repository() {
         return 1
     fi
     
+    restic -r "$BACKUP_REPO" --password-file "$RESTIC_PASSWORD_FILE" unlock >/dev/null 2>&1 || true
+
     if ! restic -r "$BACKUP_REPO" --password-file "$RESTIC_PASSWORD_FILE" check >/dev/null 2>&1; then
         echo "Error: restic repository check failed for $BACKUP_REPO" >&2
         return 1
